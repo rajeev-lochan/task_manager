@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from datetime import datetime
 
 class UserSchema(BaseModel):
     name : str
@@ -18,6 +19,7 @@ class UserDataSchema(BaseModel):
 
 class LoginResponseSchema(BaseModel):
     token: str
+    expires_at: datetime
     message: str
     data: UserDataSchema
 

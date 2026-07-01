@@ -5,5 +5,6 @@ class Settings(BaseSettings):
     DB_CONNECTION: str
     SECRETE_KEY: str
     ALGORITHM: str
+    TOKEN_EXPIRE_MINUTES: int = 15
 
 settings = Settings()

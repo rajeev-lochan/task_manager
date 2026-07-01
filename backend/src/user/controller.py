@@ -1,9 +1,11 @@
+from datetime import datetime, timedelta, timezone
 from src.user.dtos import UserSchema, LoginSchema
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from pwdlib import PasswordHash
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 import jwt
+from jwt import ExpiredSignatureError, InvalidTokenError
 from src.utils.settings import settings
 
 password_hash = PasswordHash.recommended()
@@ -57,7 +59,6 @@ def login_user(body:LoginSchema, db: Session):
         )
 
     user = response["data"]
-    print(user["id"], '========') 
 
     # Verify password
     if not verify_password(
@@ -69,9 +70,17 @@ def login_user(body:LoginSchema, db: Session):
             detail="Invalid username or password"
         )
 
+
+    # expire_time = datetime.now(timezone.utc) + timedelta(minutes=settings.TOKEN_EXPIRE_MINUTES)
+    expire_time = datetime.now(timezone.utc) + timedelta(minutes=settings.TOKEN_EXPIRE_MINUTES)
+    # expire_time = datetime.now(timezone.utc) + timedelta(seconds=30)
+
+
+
     token = jwt.encode({
         "_id":user["id"],
-        "username":user["name"]
+        "username":user["username"],
+        "exp": expire_time
     }, settings.SECRETE_KEY, settings.ALGORITHM)
 
 
@@ -80,6 +89,80 @@ def login_user(body:LoginSchema, db: Session):
 
     return {
         "token": token,
+        "expires_at": expire_time.isoformat(),
         "message": "Login successful",
         "data": user
     }
+
+# def is_authenticated(request: Request, db: Session):
+#     token = request.headers["authorization"]
+#     token = token.split(" ")[-1]
+
+#     data = jwt.decode(token, settings.SECRETE_KEY, settings.ALGORITHM)
+#     user_id = data["_id"]
+#     expires_at = data["exp"]
+#     current_time = datetime.now().timestamp()
+
+#     if current_time > expires_at:
+#         raise HTTPException(
+#             status_code=401,
+#             detail="You are not authorized to access this resource"
+#         )
+
+
+#     return "Done"
+
+def is_authenticated(request: Request, db: Session):
+    auth_header = request.headers.get("Authorization")
+
+    if not auth_header:
+        raise HTTPException(
+            status_code=401,
+            detail="Authorization header is missing"
+        )
+
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid authorization header"
+        )
+
+    token = auth_header.split(" ")[1]
+
+    try:
+        payload = jwt.decode(
+            token,
+            settings.SECRETE_KEY,
+            algorithms=[settings.ALGORITHM]
+        )
+    except ExpiredSignatureError:
+        raise HTTPException(
+            status_code=401,
+            detail="Token has expired"
+        )
+    except InvalidTokenError:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid token"
+        )
+
+    user_id = payload["_id"]
+
+    result = db.execute(
+        text("""
+            SELECT fn_get_user_by_id(:user_id) AS result;
+        """),
+        {
+            "user_id": user_id
+        }
+    )
+
+    response = result.scalar()
+
+    if response["status_code"] >= 400:
+        raise HTTPException(
+            status_code=response["status_code"],
+            detail=response["message"]
+        )
+
+    return response["data"]
