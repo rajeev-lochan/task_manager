@@ -6,7 +6,7 @@ from src.user import controller
 
 user_routes = APIRouter(prefix="/api/v1/user")
 
-@user_routes.post("/register", status_code=status.HTTP_201_CREATED)
+@user_routes.post("/register")
 def register(body: UserSchema, db:Session = Depends(get_db)):
     return controller.register(body, db)
 

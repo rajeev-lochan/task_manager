@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from pwdlib import PasswordHash
 from fastapi import HTTPException, Request
+import json
 import jwt
 from jwt import ExpiredSignatureError, InvalidTokenError
 from src.utils.settings import settings
@@ -36,7 +37,19 @@ def register(body: UserSchema, db:Session):
         }
     )
     db.commit()
-    return result.scalar()
+    
+    response = result.scalar()
+    # If PostgreSQL returns JSON as a string
+    if isinstance(response, str):
+        response = json.loads(response)
+
+    if response["status_code"] != 200:
+        raise HTTPException(
+            status_code=response["status_code"],
+            detail=response["message"]
+        )
+
+    return response
 
 def login_user(body:LoginSchema, db: Session):
     data = body.model_dump()
